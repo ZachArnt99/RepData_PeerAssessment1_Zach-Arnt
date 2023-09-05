@@ -1,0 +1,189 @@
+---
+title: "RepData_PeerAssessment1_Zach-Arnt"
+author: "ZBA"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Data downloaded from:
+https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip
+2023-Sep-05
+
+Description of data from:
+https://github.com/ZachArnt99/RepData_PeerAssessment1_Zach-Arnt/blob/master/README.md
+2023-SEP-05
+
+Description of data:
+The variables included in this dataset are:
+steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+date: The date on which the measurement was taken in YYYY-MM-DD format
+interval: Identifier for the 5-minute interval in which measurement was taken
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+
+## Analysis
+
+#Load analysis package(s)
+```{r}
+library(tidyverse)
+```
+
+#Read in the data
+```{r}
+activity <- read.csv("activity.csv")
+```
+
+#Add columns for use in analysis and plot histogram
+```{r}
+activity <- mutate(activity, "intervalID" = 1:17568,
+                   "day" = ceiling(intervalID*5/(60*24)),
+                   "intervalNUMBER" = rep(1:288,61))
+head(activity)
+stepsperday <- aggregate(activity$steps, by = list(day = activity$day),
+                         FUN = sum, simplify=TRUE, na.rm=TRUE)
+head(stepsperday)
+
+hist(stepsperday$x, breaks=20, main = "Histogram of all 61 Days",
+     xlab = "Steps per Day", ylab = "Number of Days")
+rug(stepsperday$x)
+```
+
+#Average and median steps per day, ignoring missing values:
+```{r}
+mean(stepsperday$x)
+median(stepsperday$x)
+```
+
+#Store results in a data.frame for later analysis
+```{r}
+results <- data.frame("NA Handling" = "ignore", "Mean" = mean(stepsperday$x), 
+                      "Median" = median(stepsperday$x))
+```
+
+#Plot the average number of steps taken during each interval over 61 days.
+```{r}
+stepsperinterval <- aggregate(activity[, "steps"],
+                              by = list(interval = activity$intervalNUMBER),
+                              FUN = mean, simplify=TRUE, na.rm=TRUE)
+
+plot(stepsperinterval$interval,stepsperinterval$x,type="l",
+     main="Average Steps Taken During Each Interval\nAveraged Over 61 Days",
+     xlab= "Interval Number",ylab= "Avg. Steps Taken")
+```
+
+#On average, the interval number with the most steps over the 61-day trail is
+```{r}
+which(stepsperinterval$x == max(stepsperinterval$x))
+```
+
+#The total number of rows with NA is
+```{r}
+nrow(activity) - nrow(na.omit(activity))
+```
+
+#The rows with NAs are:
+```{r}
+NArows <- which(is.na(activity$steps))
+```
+
+#These correspond to intervalNUMBERs
+```{r}
+NAintervals <- activity$intervalNUMBER[NArows]
+```
+
+#Method 1: Impute a complete dataset by replacing NAs with averages.
+```{r}
+activity1 <- activity
+means1 <- stepsperinterval$x
+activity1$steps[NArows] <- means1[NAintervals]
+```
+
+#Histogram of steps per day in imputed dataset using Method 1 (mean)
+```{r}
+imputed1 <- aggregate(activity1[, "steps"],
+                      by = list(day = activity1$day),
+                      FUN = sum)
+hist(imputed1$x, breaks=20, main = "Imputed Histogram of all 61 Days\nMethod 1 (Mean)",
+     xlab = "Steps per Day", ylab = "Number of Days")
+rug(imputed1$x)
+```
+
+#Average and median steps per day after imputing missing values with Method 1 (mean):
+```{r}
+mean(imputed1$x)
+median(imputed1$x)
+```
+
+#Update results data.frame for later analysis
+```{r}
+results[2,1] <- "impute MEAN"
+results[2,2] <- mean(imputed1$x)
+results[2,3] <- median(imputed1$x)
+```
+
+#Method 2: Impute a complete dataset by replacing NAs with medians.
+```{r}
+activity2 <- activity
+stepsperinterval2 <- aggregate(activity2[, "steps"],
+                               by = list(interval = activity2$intervalNUMBER),
+                               FUN = median, simplify=TRUE, na.rm=TRUE)
+medians <- stepsperinterval2$x
+activity2$steps[NArows] <- medians[NAintervals]
+```
+
+#Histogram of steps per day in imputed dataset using Method 2 (median)
+```{r}
+imputed2 <- aggregate(activity2[, "steps"],
+                      by = list(day = activity2$day),
+                      FUN = sum)
+
+hist(imputed2$x, breaks=20, main = "Imputed Histogram of all 61 Days\nMethod 2 (Median)",
+     xlab = "Steps per Day", ylab = "Number of Days")
+rug(imputed2$x)
+```
+
+#Average and median steps per day after imputing missing values with Method 2 (median):
+```{r}
+mean(imputed2$x)
+median(imputed2$x)
+```
+
+#Update results data.frame and compare results
+```{r}
+results[3,1] <- "impute MEDIAN"
+results[3,2] <- mean(imputed2$x)
+results[3,3] <- median(imputed2$x)
+```
+
+#The table of results shows how estimates of mean and median steps per day change with the method of dealing with NA values. Both of the means go up. However, when imputing with the median, four of the new values are greater than 10,395 and four are less, so the median does not change.
+```{r}
+results
+```
+
+#Factorize imputed data set by dayTYPE to compare weekdays and weekends
+```{r}
+dayvect <- weekdays(as.Date(activity2$date),abbreviate=TRUE)
+wkends <- c("Sat", "Sun")
+dayTYPE <- factor((dayvect %in% wkends), 
+                  levels=c(TRUE,FALSE), labels=c("weekend", "weekday")) 
+
+activity2 <- mutate(activity2,dayTYPE=dayTYPE)
+head(activity2)
+
+stepsperinterval3 <- split(activity2,f=dayTYPE)
+
+weekdays <- aggregate(stepsperinterval3$weekday[, "steps"],
+                      by = list(interval = stepsperinterval3$weekday$intervalNUMBER),
+                      FUN = mean)
+weekends <- aggregate(stepsperinterval3$weekend[, "steps"],
+                      by = list(interval = stepsperinterval3$weekend$intervalNUMBER),
+                      FUN = mean)
+
+par(mfrow=c(1,2),mar=c(4,4,5,1))
+plot(weekdays$interval,weekdays$x,type="l",
+     main="Average Steps Taken on\nWeekdays During Each Interval\nImputed with Median and\nAveraged Over 61 Days",
+     xlab= "Interval Number",ylab= "Avg. Steps Taken")
+plot(weekends$interval,weekends$x,type="l",
+     main="Average Steps Taken on\nWeekends During Each Interval\nImputed with Median and\nAveraged Over 61 Days",
+     xlab= "Interval Number",ylab= "Avg. Steps Taken")
+```
+
